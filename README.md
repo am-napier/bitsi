@@ -20,6 +20,14 @@ simple example:
     for e in cfg.doRead('entity', fields='title,_key,identifier,informationaal', filter=f):
        log.info(e, indent=4)
         
-    # disclaimer: I didn't test this ;)
+    # disclaimer: I didn't test this example, but I've been using this itsi script though for nearly 2 years.
+
+You can read all KV store objects returned by list_types()
+You need to know the schema underlying these objects, see the ITSI REST API docs.  http://docs.splunk.com/Documentation/ITSI/latest/RESTAPI/ITSIRESTAPIreference
+For bulk updates use the bulk_update function
+The API is not aware of deep copy, ie you must supply the whole object if you update a section, so read it first and use the read copy.  For the first level its OK (or was at the time of my last test)
+This can have dramatic impact on the refresh queue so keep an eye there
+
+requires requests ...
 
 <blurb>Backup your KV store first, no warranties implied or otherwise ... </blurb>

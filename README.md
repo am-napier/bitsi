@@ -5,22 +5,20 @@ itsi.py and logger.py are needed for everything.  The boiler_plate.py and entity
 
 simple example:
 
-    import itsi, json
-    from logger import log
+    import itsi
     
     cfg = itsi.Config()
-    cfg.setUser(user)     # default is "admin"
-    cfg.setHost(server)   # default is "localhost"
-    cfg.setPort(port)     # default is "changeme", if you use boiler plate and call setup call be promted for this
-    cfg.setPswd(pswd)     # default 8089, note its an int
+    cfg.set_user(user)     # default is "admin"
+    cfg.set_host(server)   # default is "localhost"
+    cfg.set_port(port)     # default is "changeme", if you use boiler plate and call setup call be promted for this
+    cfg.set_pswd(pswd)     # default 8089, note its an int
 
     # there is also a Filter.title method but this is a more interesting example, you can also use identifier.fields etc..
     f=itsi.Filter.rex("title", "^foo")
     
-    for e in cfg.doRead('entity', fields='title,_key,identifier,informationaal', filter=f):
-       log.info(e, indent=4)
+    for e in cfg.read_config('entity', fields='title,_key,identifier,informationaal', filter=f):
+       print e
         
-    # disclaimer: I didn't test this example, but I've been using this itsi script though for nearly 2 years.
 
 You can read all KV store objects returned by list_types()
 You need to know the schema underlying these objects, see the ITSI REST API docs.  http://docs.splunk.com/Documentation/ITSI/latest/RESTAPI/ITSIRESTAPIreference

@@ -53,8 +53,7 @@ You'll also need requests module available in your python.  Note splunk has this
 
 """
 
-import getpass, argparse, sys, itsi, json, csv, copy
-from logger import log
+import getpass, argparse, sys, itsi, json, csv, copy, logging
 
 """
 Get user supplied args and setup the itsi.Config object
@@ -88,19 +87,16 @@ def setup(argv):
     p.add_argument("infile", help="the name of the input file")
 
     args = p.parse_args(argv)
-    log.setLevel(args.log_level)
-    log.db("Reading from inputs %s" % args.infile)
+    itsi.setup_logging(level=args.log_level)
+
+    logger.debug("Reading from inputs %s" % args.infile)
 
     if not args.pswd:
         # getting the password because it was not supplied on the command line
         args.pswd = getpass.getpass('\nEnter Splunk password : ')
 
     # construct the wrapper for running commands
-    cfg = itsi.Config()
-    cfg.setUser(args.user)
-    cfg.setHost(args.server)
-    cfg.setPort(args.port)
-    cfg.setPswd(args.pswd)
+    cfg = itsi.Config(user=args.user, host=args.server, port=args.port, pswd=args.pswd)
 
     # returning a tuple of args and the config object
     return (args, cfg)
@@ -205,7 +201,7 @@ def updatePolicies(policies, policy_type):
         try:
             cron = "%d %d * * %s" % (int(start_toks[1]), int(start_toks[0]), str(r['days']))
         except IndexError:
-            log.info("Index Error for break point")
+            logger.info("Index Error for break point")
             sys.exit(-1)
         duration = (int(end_toks[0]) * 60 + int(end_toks[1])) - (int(start_toks[0]) * 60 + int(start_toks[1]))
         policies[title] = {
@@ -216,16 +212,16 @@ def updatePolicies(policies, policy_type):
             'aggregate_thresholds': get_thresholds(r)
         }
     else:
-        log.fatal("Unknown type passed")
+        logger.error("Unknown type passed")
 
 
 if __name__ == '__main__':
-    log.info("Setting up input arguments")
+    logger = logging.getLogger("splunk.bitsi.create_threshold_templates")
     args, cfg = setup(sys.argv)
 
-    tpl = cfg.doRead('kpi_threshold_template', key=args.default_template)
+    tpl = cfg.read_config('kpi_threshold_template', key=args.default_template)
     if tpl == None:
-        log.fatal("KPI Template not found: %s" % args.default_template)
+        logger.error("KPI Template not found: %s" % args.default_template)
 
     # don't want the _key on the template
     del tpl['_key']
@@ -248,14 +244,10 @@ if __name__ == '__main__':
             try:
                 template = templates[r['template']]
             except KeyError:
-                try:
-                    if r['template'] == "":
-                        log.info("can't process row (%s)" % str(r))
-                        continue  # row is unusable
-                    template = templates[r['template']] = {'policies': {'default_policy': get_default_policy()}}
-                except KeyError:
-                    # only supports UTF-8, saving xlsx as csv often goes as utf-8-BOM
-                    log.info("template column not found in csv, is encoding correct, no BOM please, we are british")
+                if r['template'] == "":
+                    logger.info("can't process row (%s)" % str(r))
+                    continue  # row is unusable
+                template = templates[r['template']] = {'policies': {'default_policy': get_default_policy()}}
             updatePolicies(template['policies'], args.type)
 
     for t in templates:
@@ -265,10 +257,10 @@ if __name__ == '__main__':
         new_tpl['title'] = t
 
         #print json.dumps(new_tpl, indent=4)
-        id = cfg.doCreate("kpi_threshold_template", new_tpl)
+        id = cfg.create_config("kpi_threshold_template", new_tpl)
 
         print "created " + str(id)
 
-    # id = cfg.doCreate("kpi_threshold_template", tpl)
+    # id = cfg.create_config("kpi_threshold_template", tpl)
 
-    # print cfg.listTypes()
+    # print cfg.list_types()

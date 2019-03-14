@@ -41,11 +41,7 @@ def setup(argv):
     args.pswd = getpass.getpass('\nEnter Splunk password : ')
 
   logging.debug("construct the wrapper for running commands")
-  cfg = itsi.Config()
-  cfg.set_user(args.user)
-  cfg.set_host(args.server)
-  cfg.set_port(args.port)
-  cfg.set_pswd(args.pswd)
+  cfg = itsi.Config(user=args.user, host=args.server, port=args.port, pswd=args.pswd)
 
   logging.debug("returning a tuple of args and the config object")
   return (args, cfg)

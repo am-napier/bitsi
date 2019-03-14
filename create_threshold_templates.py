@@ -71,7 +71,7 @@ def setup(argv):
     p.add_argument("-u", "--user", help="user with access to run rest calls against ITOA", type=str, default='admin')
     p.add_argument("--pswd", help="password for named user, no default, should prompt the user if not provided",
                    type=str)
-    p.add_argument("-l", "--log_level", help="log level, 0=debug,1=info,2=warn,3=error", type=int, default=1)
+    p.add_argument("-l", "--log_level", help="python logging debug,info,warn,error", type=str, default="warn")
     p.add_argument("-s", "--server", help="Splunk server", type=str, default='localhost')
     p.add_argument("-p", "--port", help="port for REST management interface", type=int, default=8089)
     p.add_argument("-d", "--default_template",

@@ -56,7 +56,7 @@ logging_on = False
 
 class Config:
 	user = 'admin'
-	pswd = 'splunking_itsi'
+	pswd = 'changeme'
 	host = 'localhost'
 	port = 8089
 	templateCache = {}

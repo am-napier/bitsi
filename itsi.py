@@ -28,9 +28,9 @@ Note: the try clause is needed as the saved_page type throws a 400 erro
 	from itsi import Config
 	r = Config()
 	res = []
-	for i in r.listTypes():
+	for i in r.list_types():
 		try:
-			res.append( "Count of %s is %d" % (i, r.getCount(i)) )
+			res.append( "Count of %s is %d" % (i, r.get_count(i)) )
 		except ItsiError as e:
 			res.append('Failed: ' + e.text)
  
@@ -40,10 +40,8 @@ Note: the try clause is needed as the saved_page type throws a 400 erro
 
 '''
 
-import requests, csv, io, sys, uuid, json, copy
+import requests, csv, io, sys, uuid, json, copy, logging
 from requests.auth import HTTPBasicAuth
-from logger import log
-#requests.packages.urllib3.disable_warnings()
 
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
 from requests.packages.urllib3.exceptions import SNIMissingWarning
@@ -53,30 +51,49 @@ requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 requests.packages.urllib3.disable_warnings(SNIMissingWarning)
 requests.packages.urllib3.disable_warnings(InsecurePlatformWarning)
 
+logging_on = False
+
 
 class Config:
 	user = 'admin'
-	pswd = 'changeme'
+	pswd = 'splunking_itsi'
 	host = 'localhost'
 	port = 8089
 	templateCache = {}
 
-	def __init__(self):
+	logger = logging.getLogger("splunk.bitsi.Config")
+
+	def __init__(self, host=None, user=None, port=None, pswd=None):
 		self.session = requests.Session()
+
+		self.logger.info("logging_on "+str(logging_on))
+
+		if host:
+			self.set_host(host)
+		if user:
+			self.set_user(user)
+		if port:
+			self.set_port(port)
+		if pswd:
+			self.set_pswd(pswd)
 		self.session.auth = (self.user, self.pswd)
 
-	def setUser(self, user):
+	def set_user(self, user):
+		self.logger.debug("set user %s", user)
 		self.user = user
 		self.session.auth = (self.user, self.pswd)
 
-	def setPswd(self, pswd):
+	def set_pswd(self, pswd):
+		self.logger.debug("set user ****")
 		self.pswd = pswd
 		self.session.auth = (self.user, self.pswd)
 
-	def setHost(self, host):
+	def set_host(self, host):
+		self.logger.debug("set host %s", host)
 		self.host = host
 
-	def setPort(self, port):
+	def set_port(self, port):
+		self.logger.debug("set user %d", port)
 		self.port = port
 
 
@@ -85,31 +102,31 @@ class Config:
 	
 	examples
 	cfg = ITSIConfig() #assume the default creds are OK
-	cfg.getCount()	<= returns the number of services defined
-	cfg.getCount(type='entity')	<= returns the number of entities defined
-	cfg.getCount(type='entity', filter='"title" : {"$regex":"^app|bah$", "$options":"i"}}')	<= returns the number of entities defined that have a title string with app or ending in bah
+	cfg.get_count()	<= returns the number of services defined
+	cfg.get_count(type='entity')	<= returns the number of entities defined
+	cfg.get_count(type='entity', filter='"title" : {"$regex":"^app|bah$", "$options":"i"}}')	<= returns the number of entities defined that have a title string with app or ending in bah
 	
 	returns int
 	raises ItsiError if it failed
 	'''
-	def getCount(self, type='service', filter=''):
+	def get_count(self, type='service', filter=''):
 		params = []
 		if filter != '':
 			params.append("filter=%s" % filter)		
 
-		return self._getJsonOrDie(self.session.get(self._getURL([type, 'count'], params), verify=False))['count']
+		return self._get_json_or_die(self.session.get(self._get_url([type, 'count'], params), verify=False))['count']
 	
 
 	'''
 	Get all the types supported by the API
 	Will return a list of available types to manage
 	'''
-	def listTypes(self):
-		return self._getJsonOrDie(self.session.get(self._getURL(['get_supported_object_types']), verify=False))
+	def list_types(self):
+		return self._get_json_or_die(self.session.get(self._get_url(['get_supported_object_types']), verify=False))
 
 
 	''' -----------------------------------------------------------------
-	json[] doRead - read all the objects from the nominated server using the filter/fields provided
+	json[] read_config - read all the objects from the nominated server using the filter/fields provided
 			
 	Params:
 		limit - number of rows to return, 0 is all records and the default value
@@ -119,17 +136,17 @@ class Config:
 	examples:
 	
 	List the services
-		r.doRead()
+		r.read_config()
 
 	List the entities	
-		r.doRead('entity')	
+		r.read_config('entity')	
 
 	List the entities that start with host and get the title, _key, _user and informational fields	
-		r.doRead('entity', filter='{"title":{"$regex":"^host"} }', fields='title,_key,_user,informational')	
+		r.read_config('entity', filter='{"title":{"$regex":"^host"} }', fields='title,_key,_user,informational')	
 
 	return json[]	
 	'''
-	def doRead(self, type="service", key='', filter='', fields='title,_key', limit=0):
+	def read_config(self, type="service", key='', filter='', fields='title,_key', limit=0):
 		params = []
 		uris = [type]
 		if( len(key) > 0 ):
@@ -142,7 +159,7 @@ class Config:
 		if filter != '':
 			params.append("filter=%s" % (filter))
 
-		return self._getJsonOrDie(self.session.get(self._getURL(uris, params), verify=False))
+		return self._get_json_or_die(self.session.get(self._get_url(uris, params), verify=False))
 
 	'''
 	read a template object for the service using the title provided
@@ -150,28 +167,19 @@ class Config:
 	caller WILL modify the object.
 	This works for services and kpi_base searches only, its a limit of the API.
 	'''
-	def getTemplate(self, uuid, type="service"):
-                uris = [type, uuid, "templatize"]
-                return self._getJsonOrDie(self.session.get(self._getURL(uris), verify=False))
-		# setup the blank cache
-		try:	
-			if uuid not in self.templateCache[type]:
-				# not in the cache so get a copy and store it
-				uris = [type, uuid, "templatize"]
-				self.templateCache[type][uuid] = self._getJsonOrDie(self.session.get(self._getURL(uris), verify=False))
-			# dont return the copy in the cache (in case the caller modifies it) but make a copy for return
-			res = copy.deepcopy(self.templateCache[type][uuid])
-			# fix the kpis adds uuids and removes the service health kpi as that seems to be added back in when its committed
-			self.fixKPIs(res)
-			return res
-			
-		except KeyError:
-			# means the key for type hasn't been created before
-			log.info("getTemplate::creating cache for " + type)
-			self.templateCache[type] = {}
+	def get_template(self, uuid, type="service"):
+		uris = [type, uuid, "templatize"]
+		return self._get_json_or_die(self.session.get(self._get_url(uris), verify=False))
 
-		return self.getTemplate(uuid, type)
-
+	def get_refresh_q_size(self):
+		url = "https://%s:%d/servicesNS/nobody/SA-ITOA/storage/collections/data/itsi_refresh_queue" \
+				% (self.host, self.port)
+		try:
+			q = self._get_json_or_die(self.session.get(url, verify=False))
+			return len(q)
+		except Exception as e:
+			self.logger.error("Failed to fetch the queue: " + str(e))
+		return -1
 
 	'''
 	Don't allow blank filter unless key is specified, one MUST have a value so accidental deletes on all objects cant happen
@@ -180,23 +188,16 @@ class Config:
 
 	testing for this will check to see ...
 	'''	
-	def doDelete(self, type, key='', filter=''):
-		# if filter=='' and key=='':
-		# 	raise ItsiError('key and filter are blank, please supply one value or all objects will be deleted')
-
-		# return self._getJsonOrDie(self.session.delete(self._getURL([type], _getParams(filter=filter, key=key)), verify=False))
-
+	def delete_config(self, type, key='', filter=''):
 		uris = [type]
-		if key=='' and filter=='':
+		if key == '' and filter == '':
 			raise ItsiError('key and filter are blank, please supply one value or all objects of this type will be deleted')
-		elif key!= '' :
+		elif key != '':
 			uris.append(key)
-		# note is_partia_data requred to stop overwrite of existing properties
-		url = self._getURL(uris, ["filter=%s" % (filter)])
-		log.info("Delete URL = "+url)
+		url = self._get_url(uris, ["filter=%s" % (filter)])
+		self.logger.info("Delete URL = " + url)
 		return self.session.delete(url, verify=False).ok
 
-
 	'''
 	Provides method to update a single object (by key) or a set (by filter)
 	return bool if successful, raises ItsiError if it fails
@@ -210,11 +211,10 @@ class Config:
 	this example can update an entity but to do so without all the original properties will see attributes lost
 	doModify('entity', {'description' : 'I can update any property'}, key='df713236-ee1f-427b-af87-73828b512461')
 	'''
-	def doUpdate(self, type, template, key):
-		#log.db("doMod ... ")
+	def update_config(self, type, template, key):
 		uris = [type, key]
 	
-		return self._getJsonOrDie(self.session.post(self._getURL(uris, ['is_partial_data=1']), json.dumps(template), verify=False, headers={'Content-Type':'application/json'}))
+		return self._get_json_or_die(self.session.post(self._get_url(uris, ['is_partial_data=1']), json.dumps(template), verify=False, headers={'Content-Type': 'application/json'}))
 
 	'''
 	Provides method to update a single object (by key) or a set (by filter)
@@ -230,12 +230,11 @@ class Config:
 	doModify('entity', {'description' : 'I can update any property'}, key='df713236-ee1f-427b-af87-73828b512461')
 	'''
 
-	def doBulkUpdate(self, type, data):
-		# log.db("doMod ... ")
+	def bulk_update_config(self, type, data):
 		uris = [type, "bulk_update"]
 
-		return self._getJsonOrDie(
-			self.session.post(self._getURL(uris, ['is_partial_data=1']), json.dumps(data), verify=False,
+		return self._get_json_or_die(
+			self.session.post(self._get_url(uris, ['is_partial_data=1']), json.dumps(data), verify=False,
 							  headers={'Content-Type': 'application/json'}))
 
 
@@ -246,13 +245,13 @@ class Config:
 
 	json.dumps seems to be needed to force the dict to json before sending	
 	'''
-	def doCreate(self, type, template):
+	def create_config(self, type, template):
 		# this could fail if UUIDs are not managed
-		return self._getJsonOrDie(self.session.post(self._getURL([type], []), json.dumps(template), verify=False, headers={'Content-Type':'application/json'}))
+		return self._get_json_or_die(self.session.post(self._get_url([type], []), json.dumps(template), verify=False, headers={'Content-Type': 'application/json'}))
 
 # 	'''
 # 	replace the alias called name with the parameter value in the passed ruleArray
-# 	assumes dict is the entity_rules array defined on a service object from doRead or getTemplate
+# 	assumes dict is the entity_rules array defined on a service object from read_config or get_template
 # 	loop through all rule_items and replace text in any with the values provided
 # 	ruleType is one of alias, info or title
 # 	ruleArray = [
@@ -278,9 +277,9 @@ class Config:
 	# add UUIDs to the KPIs in a service
 	# no guarentee the UUIDs are unique so the call could fail when its commited
 	# if that happens resubmit
-	def addUUIDs(self, svc):
+	def add_uuids(self, svc):
 		for k in svc['kpis']:
-			k['_key'] = self._getUUID()
+			k['_key'] = self._get_uuids()
 
 	# this is a destructive method and WILL change the contents of svc in two ways
 	# 1. the service_health KPI will be removed because if it exists in the template when we create it then it gets added twice (log that bug)
@@ -290,14 +289,14 @@ class Config:
 	# im thinking for performance that we'll need a caching layer on the templates so we don't have to read them
 	# them from the server every time we want one because its two API calls
 
-	def fixKPIs(self, svc):
+	def fix_kpis(self, svc):
 		# fix the UUIDs cause there aren't any set
 		# remove the service health KPI or it gets created twice
-		self.addUUIDs(svc)
+		self.add_uuids(svc)
 		kpis = []
 		for kpi in svc['kpis']:
 			if kpi['type'] != "service_health":
-				kpi['_key'] = self._getUUID()
+				kpi['_key'] = self._get_uuids()
 				kpis.append(kpi)
 		svc['kpis'] = kpis
 
@@ -306,15 +305,15 @@ class Config:
 	# -----------------  Private functions used in this module -----------------
 
 	# this doesn't guarentee it created a unique UUID
-	def _getUUID(self):
+	def _get_uuids(self):
 		return str(uuid.uuid4())
 
 	'''
 	Get the url to run the job
 	'''
-	def _getURL(self, uri=[], params=[]):
+	def _get_url(self, uri=[], params=[]):
 		url = "https://%s:%d/servicesNS/nobody/SA-ITOA/itoa_interface/%s?%s" % (self.host, self.port, "/".join(uri), "&".join(params))
-		log.db("_getURL ==>>> "+url)
+		self.logger.debug("_get_url ==>>> " + url)
 		return url
 
 	'''
@@ -324,30 +323,36 @@ class Config:
 	different exceptions that can be raised, see http://docs.python-requests.org/en/master/_modules/requests/exceptions/
 	
 	'''
-	def _getJsonOrDie(self, resp):
+	def _get_json_or_die(self, resp):
 		try:
 			resp.raise_for_status()
 			return resp.json()
 		except requests.exceptions.RequestException as re:
 			raise ItsiError(resp.text, re)
 		except Exception as e:
-		    raise ItsiError("Base error: "+resp.text, e)
+			raise ItsiError("Base error: "+resp.text, e)
 
-'''
-more design work needed here too ...
-''' 
+
 class ItsiError(Exception):
-	ok = False	# use this the same way as the response.ok can be used.
+	"""
+	more work needed here too ...
+	"""
+
+	ok = False         # use this the same way as the response.ok can be used.
+
 	def __init__(self, text, chained=None):
 		self.text = "ItsiError: "+str(text)
-		if( chained != None ):
+		self.logger = logging.getLogger("splunk.bitsi.ItsiError")
+		if chained is not None:
 			self.base = chained
 			self.text += str(chained)
 
-		log.err("Raised ITSI Error: "+self.text)
+			self.logger.error("Raised ITSI Error: " + self.text)
 
 
 class Filter:
+	logger = logging.getLogger("splunk.bitsi.Filter")
+
 	def __init__(self):
 		pass
 
@@ -355,9 +360,9 @@ class Filter:
 	get a filter for a title or regex to query the KV store, 
 	details are here https://docs.mongodb.com/manual/reference/operator/query/regex/ (ish)
 	I found some inconsistencies with the docs when I first did this (re double quotes) and the syntax for the filter 
-	was rather fiddley
+	was rather fiddly
 
-	call these guys when you need to create a filter for doRead (and maybe others)
+	call these guys when you need to create a filter for read_config (and maybe others)
 	example: 
 		from itsi import Filter as F
 		titleFilter = F.title("my_service_name")
@@ -372,29 +377,38 @@ class Filter:
 		if len(flags) > 0:
 			_flgs = ', {"$options" : "%s"}' % (flags)
 		res = '{"%s" : {"$regex":"%s"} %s}' % (prop, val, _flgs)
+		Filter.logger.info("created regex filter %s", res)
 		return res
 
 	@staticmethod
 	def title(val):
 		res = '{"title" : "%s" }' % (val)
+		Filter.logger.info("created title filter %s", res)
 		return res
 
 
+def setup_logging(level='info',
+			fmt = '%(asctime)s %(levelname)s [%(lineno)d:%(module)s:%(funcName)s:%(name)s] >> %(message)s'):
+	lvl = getattr(logging, level.upper(), getattr(logging, "WARN"))
+	logging.basicConfig(level=lvl, format=fmt)
+	logging.warn("Setting log level to %s", level)
+	logging_on = True
+
+
+def test_AssertTrue():
+	assert True
+
+def test_AssertEquals():
+	assert "Foo" == "Foo"
 
 def main(args):
-	print "running unit tests?"
-	r = Config()
-	res = []
-	print Filter.rex("xxx", "yyy")
-	foo.bar()
-	for i in r.listTypes():
-		try:
-			res.append( "Count of %s is %d" % (i, r.getCount(i)) )
-		except ItsiError as e:
-			res.append('Failed: ' + e.text)
- 
-	for i in res:
-		print i
+	# filename='myapp.log'
+	logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s')
+
+	cfg = Config()
+	cfg.set_host("itsiaws")
+	print cfg.get_refresh_q_size()
+	print "done"
 
 
 if __name__ == '__main__':
